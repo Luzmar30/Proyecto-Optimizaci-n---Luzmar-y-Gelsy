@@ -8,9 +8,8 @@ Original file is located at
 """
 
 # =============================================================================
-# GEMELO DIGITAL – GASODUCTO TRANS-ANDINO (VERSIÓN EN ESPAÑOL)
-# Optimización de Procesos | Universidad Central de Venezuela
-# Prof. Ricardo Olejnik
+# GEMELO DIGITAL – GASODUCTO TRANS-ANDINO 
+# Optimización de Procesos - Proyecto
 # =============================================================================
 
 import streamlit as st
