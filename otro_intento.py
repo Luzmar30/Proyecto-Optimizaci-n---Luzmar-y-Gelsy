@@ -279,5 +279,3 @@ if "optimo" in st.session_state:
     if st.button("Limpiar"):
         del st.session_state["optimo"]
         st.rerun()
-
-!pip install streamlit
