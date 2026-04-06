@@ -9,7 +9,7 @@ Original file is located at
 # =====================================================
 # GEMELO DIGITAL – GASODUCTO TRANSANDINO 
 # Optimización de Procesos 
-=======================================================
+#=======================================================
 import streamlit as st
 import pandas as pd
 import numpy as np
