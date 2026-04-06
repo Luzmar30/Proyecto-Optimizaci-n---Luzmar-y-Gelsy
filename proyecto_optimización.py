@@ -7,9 +7,8 @@ Original file is located at
     https://colab.research.google.com/drive/1iC-1iOaQB6e6srnzzjtWMU_NBh4lv68s
 """
 # =============================================================================
-# GEMELO DIGITAL – GASODUCTO TRANS-ANDINO (VERSIÓN EN ESPAÑOL)
-# Optimización de Procesos | Universidad Central de Venezuela
-# Prof. Ricardo Olejnik
+# GEMELO DIGITAL – GASODUCTO TRANS-ANDINO 
+# Optimización de Procesos
 # =============================================================================
 
 import streamlit as st
