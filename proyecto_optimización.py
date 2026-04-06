@@ -7,9 +7,9 @@ Original file is located at
     https://colab.research.google.com/drive/1iC-1iOaQB6e6srnzzjtWMU_NBh4lv68s
 """
 # =============================================================================
-# GEMELO DIGITAL – GASODUCTO TRANS-ANDINO 
-# Optimización de Procesos
-# =============================================================================
+# GEMELO DIGITAL – GASODUCTO TRANsANDINO 
+# Optimización de Procesos 
+=======================================================
 
 import streamlit as st
 import pandas as pd
@@ -31,7 +31,6 @@ st.set_page_config(
 # =============================================================================
 # BASE DE DATOS TÉCNICA (Tablas del enunciado)
 # =============================================================================
-# Tabla 1: Tuberías API 5L Sch 40
 datos_tuberia = pd.DataFrame([
     {"DN_pulg": 12, "DE_mm": 323.8, "espesor_mm": 10.31, "costo_USD_m": 185},
     {"DN_pulg": 16, "DE_mm": 406.4, "espesor_mm": 12.70, "costo_USD_m": 260},
@@ -39,43 +38,41 @@ datos_tuberia = pd.DataFrame([
     {"DN_pulg": 24, "DE_mm": 609.6, "espesor_mm": 17.48, "costo_USD_m": 440},
 ])
 
-# Tabla 2: Grados de acero
 datos_acero = pd.DataFrame([
     {"grado": "X52", "SMYS_psi": 52000, "F": 0.72},
     {"grado": "X60", "SMYS_psi": 60000, "F": 0.72},
 ])
 
 # =============================================================================
-# PARÁMETROS FIJOS DEL PROCESO (Base)
+# PARÁMETROS FIJOS DEL PROCESO
 # =============================================================================
-longitud_total_km = 400.0                # km
-presion_entrada_psia = 800.0             # presión de entrada a la primera estación
-presion_entrega_min_psia = 500.0         # presión mínima requerida al final
-caudal_base_MMscfd = 500.0               # MMscfd (flujo de diseño base)
-gravedad_especifica = 0.65               # gravedad específica del gas
-factor_compresibilidad = 0.90            # Z
-temp_succion_K = 293.15                  # 20°C
-# Constante R universal para la fórmula de potencia (unidades inglesas)
-R_universal = 10.7316                    # psia·ft³/(lbmol·°R)
-
-# Conversiones
+longitud_total_km = 400.0
+presion_entrada_psia = 800.0
+presion_entrega_min_psia = 500.0
+caudal_base_MMscfd = 500.0
+gravedad_especifica = 0.65
+factor_compresibilidad = 0.90
+temp_succion_K = 293.15      # 20°C
+R_universal = 10.7316        # psia·ft³/(lbmol·°R)
 pies_por_km = 3280.84
 
 # =============================================================================
-# FUNCIONES DEL MODELO MATEMÁTICO
+# FUNCIONES DEL MODELO MATEMÁTICO (CORREGIDAS)
 # =============================================================================
 
 def weymouth_dp(caudal_MMscfd, longitud_km, diametro_pulg, gravedad, temp_K, Z):
     """
     Ecuación de Weymouth para caída de presión al cuadrado.
-    caudal [MMscfd], longitud [km], diametro [pulgadas], temp [K], gravedad adim, Z adim.
-    Retorna delta(P^2) = P1^2 - P2^2 [psia²].
+    Retorna delta(P^2) = P1² - P2² [psia²].
+    Basado en la fórmula estándar de la literatura de gasoductos.
     """
-    temp_R = temp_K * 9.0/5.0   # convertir a Rankine
-    longitud_pies = longitud_km * pies_por_km
-    d_pulg = float(diametro_pulg)
-    # Fórmula de Weymouth (433.5 es constante empírica)
-    dp2 = 433.5 * (caudal_MMscfd / 1.0)**2 * (longitud_pies * gravedad * temp_R * Z) / (d_pulg**5.33)
+    T_R = temp_K * 9.0/5.0                     # Rankine
+    L_pies = longitud_km * pies_por_km         # pies
+    D_pulg = float(diametro_pulg)
+    # Constante de Weymouth (para Q en MMscfd, L en pies, D en pulg)
+    C = 433.5
+    # Fórmula correcta: dp2 = (Q^2 * L * gamma * T * Z) / (C^2 * D^(16/3))
+    dp2 = (caudal_MMscfd**2 * gravedad * T_R * Z * L_pies) / (C**2 * D_pulg**(16/3))
     return dp2
 
 def presion_despues_friccion(P1_psia, dp2):
@@ -85,17 +82,13 @@ def presion_despues_friccion(P1_psia, dp2):
     return np.sqrt(P1_psia**2 - dp2)
 
 def presion_descarga_necesaria(P_objetivo_psia, dp2):
-    """Dada la presión al final de un tramo (P_objetivo) y la caída dp2, calcula la presión necesaria al inicio."""
+    """Dada la presión al final de un tramo, calcula la presión necesaria al inicio."""
     return np.sqrt(P_objetivo_psia**2 + dp2)
 
 def potencia_compresor(caudal_MMscfd, P_entrada_psia, P_salida_psia, T_entrada_K, gravedad, Z, eficiencia=0.85):
-    """
-    Potencia de compresión (HP) para una estación.
-    caudal [MMscfd], presiones [psia], temp [K], gravedad adim, Z adim, eficiencia.
-    """
+    """Potencia de compresión (HP) para una estación."""
     T_entrada_R = T_entrada_K * 9.0/5.0
-    k = 1.27   # relación Cp/Cv para gas natural típico
-    # Flujo en scf/s
+    k = 1.27
     flujo_scfs = caudal_MMscfd * 1e6 / (24 * 3600)
     term1 = flujo_scfs * Z * R_universal * T_entrada_R / (550 * eficiencia)
     term2 = (k/(k-1)) * ((P_salida_psia / P_entrada_psia)**((k-1)/k) - 1)
@@ -110,10 +103,7 @@ def temperatura_descarga(T_entrada_K, P_entrada_psia, P_salida_psia):
     return T_salida_K
 
 def maop_barlow(diametro_pulg, espesor_mm, SMYS_psi, F):
-    """
-    Presión máxima de operación (MAOP) según Barlow.
-    diametro [pulgadas], espesor [mm], SMYS [psi], F factor de diseño.
-    """
+    """Presión máxima admisible según Barlow (MAOP) en psia."""
     espesor_pulg = espesor_mm / 25.4
     if diametro_pulg <= 0 or espesor_pulg <= 0:
         return 0.0
@@ -121,28 +111,22 @@ def maop_barlow(diametro_pulg, espesor_mm, SMYS_psi, F):
     return MAOP
 
 # =============================================================================
-# CÁLCULO DEL COSTO TOTAL ANUALIZADO (TAC)
+# FUNCIONES DE COSTOS
 # =============================================================================
 
 def factor_recuperacion_capital(tasa_interes, años=20):
-    """CRF = i*(1+i)^n / ((1+i)^n - 1)"""
     i = tasa_interes / 100.0
     if i == 0:
         return 1.0 / años
     return i * (1+i)**años / ((1+i)**años - 1)
 
 def calcular_tac(capex_tuberia, capex_compresores, opex_energia, tasa_interes, años=20):
-    """
-    TAC = (CAPEX_total * CRF) + OPEX_anual
-    CAPEX_total: USD
-    OPEX_anual: USD/año
-    """
     crf = factor_recuperacion_capital(tasa_interes, años)
     tac = (capex_tuberia + capex_compresores) * crf + opex_energia
     return tac
 
 # =============================================================================
-# FUNCIÓN PRINCIPAL DE SIMULACIÓN PARA UN DISEÑO DADO
+# SIMULACIÓN PRINCIPAL (CORREGIDA)
 # =============================================================================
 
 def simular_configuracion(dn_pulg, grado_acero, caudal_MMscfd, num_estaciones,
@@ -161,10 +145,10 @@ def simular_configuracion(dn_pulg, grado_acero, caudal_MMscfd, num_estaciones,
     SMYS = fila_acero["SMYS_psi"]
     F_diseno = fila_acero["F"]
     
-    # Diámetro interno aproximado (DE - 2*espesor) para hidráulica
+    # Diámetro interno (para hidráulica)
     diametro_int_pulg = (DE_mm - 2*espesor_mm) / 25.4
     if diametro_int_pulg <= 0:
-        diametro_int_pulg = DE_mm / 25.4  # fallback
+        diametro_int_pulg = DE_mm / 25.4
     
     # Longitud por tramo
     longitud_tramo_km = longitud_total_km / num_estaciones
@@ -173,19 +157,41 @@ def simular_configuracion(dn_pulg, grado_acero, caudal_MMscfd, num_estaciones,
     dp2_tramo = weymouth_dp(caudal_MMscfd, longitud_tramo_km, diametro_int_pulg,
                             gravedad_especifica, temp_succion_K, factor_compresibilidad)
     
-    # Calcular presiones en los nodos (desde el final hacia atrás)
+    # --- Cálculo de presiones nodo desde el final hacia atrás ---
     presiones_nodo = [0.0] * (num_estaciones + 1)
-    presiones_nodo[-1] = presion_entrega_min_psia
-    for i in range(num_estaciones-1, -1, -1):
-        presiones_nodo[i] = presion_descarga_necesaria(presiones_nodo[i+1], dp2_tramo)
+    presiones_nodo[-1] = presion_entrega_min_psia   # presión al final del último tramo
     
-    # Ahora presiones_nodo[i] es la presión de descarga de la estación i (i=0..N-1)
-    # Presión de succión de cada estación
+    for i in range(num_estaciones-1, -1, -1):
+        pres_necesaria = presion_descarga_necesaria(presiones_nodo[i+1], dp2_tramo)
+        presiones_nodo[i] = pres_necesaria
+    
+    # Ajuste: la primera estación no puede entregar menos que la presión de entrada
+    # (si la presión calculada es menor, significa que no se necesita compresión ahí)
+    if presiones_nodo[0] < presion_entrada_psia:
+        presiones_nodo[0] = presion_entrada_psia
+        # Recalcular las siguientes hacia adelante para mantener consistencia
+        for i in range(num_estaciones):
+            if i == 0:
+                continue
+            # La presión al inicio del tramo i es la presión de descarga de la estación i-1
+            # pero después de la caída obtenemos la succión de la estación i
+            P_inicio_tramo = presiones_nodo[i-1]
+            P_fin_tramo = presion_despues_friccion(P_inicio_tramo, dp2_tramo)
+            # La presión de succión de la estación i es P_fin_tramo
+            # La presión de descarga necesaria para la estación i se recalcula:
+            presiones_nodo[i] = presion_descarga_necesaria(presiones_nodo[i+1], dp2_tramo)
+            # Pero si la presión de descarga calculada es menor que la succión, la estación no comprime
+            if presiones_nodo[i] < P_fin_tramo:
+                presiones_nodo[i] = P_fin_tramo
+    
+    # Ahora obtener presiones de succión y descarga por estación
     P_succion = [0.0] * num_estaciones
     P_descarga = [0.0] * num_estaciones
-    P_succion[0] = presion_entrada_psia
     P_descarga[0] = presiones_nodo[0]
+    P_succion[0] = presion_entrada_psia   # la primera estación recibe la presión de entrada
+    
     for i in range(1, num_estaciones):
+        # La presión de succión de la estación i es la presión al final del tramo i-1
         P_succion[i] = presion_despues_friccion(P_descarga[i-1], dp2_tramo)
         P_descarga[i] = presiones_nodo[i]
     
@@ -193,10 +199,15 @@ def simular_configuracion(dn_pulg, grado_acero, caudal_MMscfd, num_estaciones,
     hp_estacion = []
     temp_salida_K_estacion = []
     for i in range(num_estaciones):
-        hp = potencia_compresor(caudal_MMscfd, P_succion[i], P_descarga[i], temp_succion_K,
-                                gravedad_especifica, factor_compresibilidad)
+        # Solo si la relación de compresión es mayor que 1 (realmente comprime)
+        if P_descarga[i] > P_succion[i]:
+            hp = potencia_compresor(caudal_MMscfd, P_succion[i], P_descarga[i], temp_succion_K,
+                                    gravedad_especifica, factor_compresibilidad)
+            T_out_K = temperatura_descarga(temp_succion_K, P_succion[i], P_descarga[i])
+        else:
+            hp = 0.0
+            T_out_K = temp_succion_K
         hp_estacion.append(hp)
-        T_out_K = temperatura_descarga(temp_succion_K, P_succion[i], P_descarga[i])
         temp_salida_K_estacion.append(T_out_K)
     
     hp_total = sum(hp_estacion)
@@ -208,7 +219,7 @@ def simular_configuracion(dn_pulg, grado_acero, caudal_MMscfd, num_estaciones,
     
     # MAOP
     MAOP = maop_barlow(diametro_int_pulg, espesor_mm, SMYS, F_diseno)
-    # Presión máxima que ve el sistema
+    # Presión máxima que ve el sistema (la mayor entre descargas y entrada)
     P_max_sistema = max(P_descarga + [presion_entrada_psia])
     
     # Alertas
@@ -216,19 +227,14 @@ def simular_configuracion(dn_pulg, grado_acero, caudal_MMscfd, num_estaciones,
     alerta_temp = temp_max_C > 65.0
     alerta_presion = P_final_real < presion_entrega_min_psia
     
-    # Cálculo de costos
-    # CAPEX tubería: costo por metro * longitud total
+    # Costos
     capex_tuberia = costo_tuberia_m * longitud_total_km * 1000.0
-    # CAPEX compresores: costo por HP * HP_total
     capex_compresores = costo_compresor_USD_HP * hp_total
-    # OPEX energía: HP_total * 0.7457 (kW/HP) * horas año * costo_energía
-    horas_anio = 8760  # operación continua
+    horas_anio = 8760
     consumo_kW = hp_total * 0.7457
     opex_energia = consumo_kW * horas_anio * costo_energia_USD_kWh
-    
     TAC = calcular_tac(capex_tuberia, capex_compresores, opex_energia, tasa_interes_pct, años)
     
-    # Resultados
     resultados = {
         "TAC_USD": TAC,
         "HP_total": hp_total,
@@ -253,21 +259,16 @@ def simular_configuracion(dn_pulg, grado_acero, caudal_MMscfd, num_estaciones,
     return resultados
 
 # =============================================================================
-# FUNCIÓN PARA GENERAR EL PERFIL HIDRÁULICO (Plotly)
+# GRÁFICO DEL PERFIL HIDRÁULICO
 # =============================================================================
 
 def graficar_perfil_hidraulico(resultados, num_estaciones, longitud_total_km, caudal_MMscfd, dn_pulg):
-    """
-    Construye un gráfico de Presión vs Distancia, mostrando caídas y compresiones.
-    """
     P_descarga = resultados["P_descarga"]
-    P_succion = resultados["P_succion"]
     dp2_tramo = resultados["dp2_tramo"]
+    longitud_tramo_km = longitud_total_km / num_estaciones
     
-    # Generar puntos de distancia y presión
     distancias = []
     presiones = []
-    longitud_tramo_km = longitud_total_km / num_estaciones
     
     for i in range(num_estaciones):
         x_inicio = i * longitud_tramo_km
@@ -275,14 +276,12 @@ def graficar_perfil_hidraulico(resultados, num_estaciones, longitud_total_km, ca
         P_inicio_tramo = P_descarga[i]
         n_puntos = 50
         for j in range(n_puntos):
-            fraccion = j / (n_puntos - 1)
-            x = x_inicio + fraccion * longitud_tramo_km
-            # Interpolación cuadrática de la presión
-            P2 = max(0, P_inicio_tramo**2 - fraccion * dp2_tramo)
+            frac = j / (n_puntos - 1)
+            x = x_inicio + frac * longitud_tramo_km
+            P2 = max(0, P_inicio_tramo**2 - frac * dp2_tramo)
             P = np.sqrt(P2)
             distancias.append(x)
             presiones.append(P)
-        # Salto de presión en la estación (si no es la última)
         if i < num_estaciones - 1:
             P_fin_tramo = presion_despues_friccion(P_inicio_tramo, dp2_tramo)
             distancias.append(x_fin)
@@ -293,21 +292,16 @@ def graficar_perfil_hidraulico(resultados, num_estaciones, longitud_total_km, ca
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=distancias, y=presiones, mode='lines', name='Presión',
                              line=dict(color='#0068c9', width=3)))
-    # Marcar estaciones
     x_estaciones = [i * longitud_tramo_km for i in range(num_estaciones)]
-    y_descarga_estaciones = P_descarga
-    fig.add_trace(go.Scatter(x=x_estaciones, y=y_descarga_estaciones, mode='markers',
+    fig.add_trace(go.Scatter(x=x_estaciones, y=P_descarga, mode='markers',
                              marker=dict(color='red', size=10, symbol='triangle-down'),
                              name='Estación de compresión (descarga)'))
-    # Línea de presión mínima de entrega
     fig.add_hline(y=presion_entrega_min_psia, line_dash="dash", line_color="orange",
                   annotation_text=f"P entrega mín = {presion_entrega_min_psia} psia")
-    # Línea de MAOP
     MAOP = resultados["MAOP_psia"]
     if MAOP > 0:
         fig.add_hline(y=MAOP, line_dash="dash", line_color="red",
                       annotation_text=f"MAOP = {MAOP:.0f} psia")
-    
     fig.update_layout(
         title=f"Perfil Hidráulico – Q = {caudal_MMscfd:.0f} MMscfd, Diámetro {dn_pulg}\"",
         xaxis_title="Distancia (km)",
@@ -319,23 +313,15 @@ def graficar_perfil_hidraulico(resultados, num_estaciones, longitud_total_km, ca
     return fig
 
 # =============================================================================
-# OPTIMIZACIÓN: BÚSQUEDA DE MÍNIMO TAC
+# OPTIMIZACIÓN AUTOMÁTICA
 # =============================================================================
 
 def optimizar_configuracion(parametros_economicos):
-    """
-    Recorre todas las combinaciones de diámetro, grado y número de estaciones (1 a 5)
-    y retorna la configuración de mínimo TAC que cumple todas las restricciones.
-    parametros_economicos: dict con costo_energia, costo_compresor, tasa_interes.
-    """
     mejor = None
     mejor_tac = float('inf')
-    todos_resultados = []
-    
     diametros = datos_tuberia["DN_pulg"].tolist()
     grados = datos_acero["grado"].tolist()
-    rango_N = range(1, 6)   # hasta 5 estaciones
-    
+    rango_N = range(1, 6)
     for dn, grado, N in product(diametros, grados, rango_N):
         try:
             sim = simular_configuracion(
@@ -344,7 +330,6 @@ def optimizar_configuracion(parametros_economicos):
                 parametros_economicos["costo_compresor"],
                 parametros_economicos["tasa_interes"]
             )
-            # Verificar que todas las alertas sean falsas (diseño válido)
             if not (sim["alerta_maop"] or sim["alerta_temp"] or sim["alerta_presion"]):
                 if sim["TAC_USD"] < mejor_tac:
                     mejor_tac = sim["TAC_USD"]
@@ -358,14 +343,12 @@ def optimizar_configuracion(parametros_economicos):
                         "MAOP": sim["MAOP_psia"],
                         "T_max_C": sim["T_max_C"]
                     }
-            todos_resultados.append((dn, grado, N, sim["TAC_USD"], 
-                                     sim["alerta_maop"], sim["alerta_temp"], sim["alerta_presion"]))
         except Exception:
             continue
-    return mejor, todos_resultados
+    return mejor
 
 # =============================================================================
-# INTERFAZ DE USUARIO EN STREAMLIT
+# INTERFAZ PRINCIPAL
 # =============================================================================
 
 def main():
@@ -375,7 +358,6 @@ def main():
     y observe el impacto en el costo total anualizado (TAC), el perfil de presión y las alertas de seguridad.
     """)
     
-    # Sidebar: Parámetros de entrada
     with st.sidebar:
         st.header("⚙️ Parámetros económicos")
         costo_energia = st.number_input("Costo de energía (USD/kWh)", min_value=0.01, max_value=0.50, value=0.05, step=0.01, format="%.3f")
@@ -390,7 +372,6 @@ def main():
         Q_usuario = st.number_input("Flujo de gas (MMscfd)", min_value=100.0, max_value=1500.0, value=500.0, step=10.0)
         num_estaciones = st.slider("Número de estaciones de compresión", min_value=1, max_value=6, value=2, step=1)
         
-        st.markdown("---")
         if st.button("🚀 Optimizar automáticamente", type="primary"):
             with st.spinner("Buscando la configuración óptima..."):
                 economicos = {
@@ -398,71 +379,63 @@ def main():
                     "costo_compresor": costo_compresor,
                     "tasa_interes": tasa_interes
                 }
-                mejor, _ = optimizar_configuracion(economicos)
+                mejor = optimizar_configuracion(economicos)
                 if mejor:
-                    st.session_state["optimo_encontrado"] = mejor
-                    st.success(f"Óptimo encontrado: {mejor['DN_pulg']}\", {mejor['grado']}, {mejor['N_estaciones']} estaciones → TAC = {mejor['TAC_USD']:,.0f} USD/año")
+                    st.session_state["optimo"] = mejor
+                    st.success(f"Óptimo: {mejor['DN_pulg']}\", {mejor['grado']}, {mejor['N_estaciones']} estaciones → TAC = {mejor['TAC_USD']:,.0f} USD/año")
                 else:
-                    st.error("No se encontró ninguna configuración viable. Ajuste los parámetros económicos o amplíe el rango de diseño.")
+                    st.error("No se encontró configuración viable. Ajuste los parámetros.")
     
-    # Panel principal
-    col1, col2, col3 = st.columns(3)
-    
-    # Simular con los valores actuales
+    # Simulación actual
     resultados = simular_configuracion(
         dn_seleccionado, grado_seleccionado, Q_usuario, num_estaciones,
         costo_energia, costo_compresor, tasa_interes
     )
     
-    with col1:
-        st.metric("💰 TAC (USD/año)", f"{resultados['TAC_USD']:,.0f}")
-    with col2:
-        st.metric("⚡ Potencia total (HP)", f"{resultados['HP_total']:.0f}")
-    with col3:
-        st.metric("📉 Presión final (psia)", f"{resultados['P_final_psia']:.1f}", 
-                  delta=f"Objetivo: {presion_entrega_min_psia} psia", 
-                  delta_color="inverse" if resultados['P_final_psia'] < presion_entrega_min_psia else "normal")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("💰 TAC (USD/año)", f"{resultados['TAC_USD']:,.0f}")
+    col2.metric("⚡ Potencia total (HP)", f"{resultados['HP_total']:.0f}")
+    col3.metric("📉 Presión final (psia)", f"{resultados['P_final_psia']:.1f}", 
+                delta=f"Objetivo: {presion_entrega_min_psia} psia", 
+                delta_color="inverse" if resultados['P_final_psia'] < presion_entrega_min_psia else "normal")
     
-    # Alertas
-    alerta1, alerta2, alerta3 = st.columns(3)
-    with alerta1:
+    a1, a2, a3 = st.columns(3)
+    with a1:
         if resultados["alerta_maop"]:
-            st.error(f"⚠️ ALERTA MAOP: Presión máxima {resultados['P_max_psia']:.0f} psia > {resultados['MAOP_psia']:.0f} psia (límite de Barlow)")
+            st.error(f"⚠️ MAOP: {resultados['P_max_psia']:.0f} psia > {resultados['MAOP_psia']:.0f} psia")
         else:
-            st.success(f"✅ MAOP ok: P_max = {resultados['P_max_psia']:.0f} psia ≤ {resultados['MAOP_psia']:.0f} psia")
-    with alerta2:
+            st.success(f"✅ MAOP: {resultados['P_max_psia']:.0f} ≤ {resultados['MAOP_psia']:.0f} psia")
+    with a2:
         if resultados["alerta_temp"]:
-            st.error(f"⚠️ ALERTA TÉRMICA: T máxima = {resultados['T_max_C']:.1f} °C > 65 °C")
+            st.error(f"⚠️ Temperatura: {resultados['T_max_C']:.1f} °C > 65 °C")
         else:
-            st.success(f"✅ Temperatura ok: T_max = {resultados['T_max_C']:.1f} °C")
-    with alerta3:
+            st.success(f"✅ Temperatura: {resultados['T_max_C']:.1f} °C")
+    with a3:
         if resultados["alerta_presion"]:
-            st.error(f"⚠️ ALERTA ENTREGA: P_final = {resultados['P_final_psia']:.1f} psia < {presion_entrega_min_psia} psia")
+            st.error(f"⚠️ Presión entrega: {resultados['P_final_psia']:.1f} < {presion_entrega_min_psia} psia")
         else:
-            st.success(f"✅ Presión de entrega ok: {resultados['P_final_psia']:.1f} psia ≥ {presion_entrega_min_psia} psia")
+            st.success(f"✅ Presión entrega: {resultados['P_final_psia']:.1f} psia")
     
-    # Gráfico del perfil hidráulico
-    st.subheader("📊 Perfil de presión a lo largo del gasoducto")
-    fig_hid = graficar_perfil_hidraulico(resultados, num_estaciones, longitud_total_km, Q_usuario, dn_seleccionado)
-    st.plotly_chart(fig_hid, use_container_width=True)
+    st.subheader("📊 Perfil de presión")
+    fig = graficar_perfil_hidraulico(resultados, num_estaciones, longitud_total_km, Q_usuario, dn_seleccionado)
+    st.plotly_chart(fig, use_container_width=True)
     
-    # Desglose de costos (CAPEX vs OPEX)
     st.subheader("💰 Desglose de costos anualizados")
-    capex_total = resultados["capex_tuberia"] + resultados["capex_compresores"]
     crf = factor_recuperacion_capital(tasa_interes)
-    capex_anual = capex_total * crf
-    opex_anual = resultados["opex_energia"]
     df_costos = pd.DataFrame({
         "Concepto": ["CAPEX (Tubería)", "CAPEX (Compresores)", "OPEX (Energía)"],
-        "Costo Anual (USD)": [resultados["capex_tuberia"] * crf, resultados["capex_compresores"] * crf, opex_anual]
+        "Costo Anual (USD)": [
+            resultados["capex_tuberia"] * crf,
+            resultados["capex_compresores"] * crf,
+            resultados["opex_energia"]
+        ]
     })
-    fig_pastel = px.pie(df_costos, values="Costo Anual (USD)", names="Concepto", 
-                        title="Distribución del costo anualizado",
-                        color_discrete_sequence=px.colors.sequential.Blues_r)
-    st.plotly_chart(fig_pastel, use_container_width=True)
+    fig_pie = px.pie(df_costos, values="Costo Anual (USD)", names="Concepto",
+                     title="Distribución del costo anualizado",
+                     color_discrete_sequence=px.colors.sequential.Blues_r)
+    st.plotly_chart(fig_pie, use_container_width=True)
     
-    # Mostrar detalles de las estaciones
-    with st.expander("🔍 Detalles por estación de compresión"):
+    with st.expander("🔍 Detalles por estación"):
         df_est = pd.DataFrame({
             "Estación": [f"#{i+1}" for i in range(num_estaciones)],
             "P_succión (psia)": [f"{p:.1f}" for p in resultados["P_succion"]],
@@ -472,16 +445,14 @@ def main():
         })
         st.dataframe(df_est, use_container_width=True)
     
-    # Si se encontró un óptimo mediante el botón, mostrarlo en una ventana
-    if "optimo_encontrado" in st.session_state:
+    if "optimo" in st.session_state:
         st.success("### 🎯 Configuración óptima encontrada")
-        opt = st.session_state["optimo_encontrado"]
-        st.write(f"**Diámetro:** {opt['DN_pulg']} pulg — **Grado:** {opt['grado']} — **Estaciones:** {opt['N_estaciones']}")
+        opt = st.session_state["optimo"]
+        st.write(f"**Diámetro:** {opt['DN_pulg']}″ — **Grado:** {opt['grado']} — **Estaciones:** {opt['N_estaciones']}")
         st.write(f"**TAC mínimo:** {opt['TAC_USD']:,.0f} USD/año")
-        st.write(f"**Potencia total:** {opt['HP_total']:.0f} HP")
-        st.write(f"**Presión final:** {opt['P_final']:.1f} psia | **MAOP:** {opt['MAOP']:.0f} psia | **T_max:** {opt['T_max_C']:.1f} °C")
+        st.write(f"**Potencia:** {opt['HP_total']:.0f} HP | **P_final:** {opt['P_final']:.1f} psia | **MAOP:** {opt['MAOP']:.0f} psia | **T_max:** {opt['T_max_C']:.1f} °C")
         if st.button("Limpiar óptimo"):
-            del st.session_state["optimo_encontrado"]
+            del st.session_state["optimo"]
             st.rerun()
 
 if __name__ == "__main__":
