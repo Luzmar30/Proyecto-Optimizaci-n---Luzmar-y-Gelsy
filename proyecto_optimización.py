@@ -7,7 +7,7 @@ Original file is located at
     https://colab.research.google.com/drive/1iC-1iOaQB6e6srnzzjtWMU_NBh4lv68s
 """
 # =====================================================
-# GEMELO DIGITAL – GASODUCTO TRANsANDINO 
+# GEMELO DIGITAL – GASODUCTO TRANSANDINO 
 # Optimización de Procesos 
 =======================================================
 import streamlit as st
